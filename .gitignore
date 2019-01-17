@@ -1,0 +1,6 @@
+/Debug/
+/Drivers/
+/startup/
+*.launch
+*.ld
+syscalls.c
