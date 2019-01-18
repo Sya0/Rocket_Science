@@ -125,7 +125,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-
+	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
+	  HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -247,7 +248,7 @@ void Callibration()
 uint8_t readReg(uint8_t reg)
 {
 	uint8_t retVal = 0, reg2 = reg;
-	HAL_I2C_Master_Transmit(&hi2c1, 0xEF,	&reg2 , 1, 10000);
+	//HAL_I2C_Master_Transmit(&hi2c1, 0xEF,	&reg , 1, 10000);
 	HAL_I2C_Master_Receive(&hi2c1, 0xEF, &retVal, 1, 10000);
 	return retVal;
 }
