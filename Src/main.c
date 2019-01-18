@@ -80,7 +80,8 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN 0 */
 short AC1, AC2, AC3, B1, B2, MB, MC, MD;
 unsigned short AC4, AC5, AC6;
-long UT;
+short oss = 1;
+long UT, UP;
 long temp;
 
 void Callibration();
@@ -88,6 +89,7 @@ void writeReg(uint8_t reg, uint8_t val);
 uint8_t readReg(uint8_t reg);
 long Uncompansate_Temp();
 long Get_Temp();
+long Uncompansate_Pressure();
 /* USER CODE END 0 */
 
 /**
@@ -133,6 +135,7 @@ int main(void)
 	  Callibration();
 	  HAL_Delay(5);
 	  UT = Uncompansate_Temp();
+	  UP = Uncompansate_Pressure();
 	  temp = Get_Temp();
 	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
 	  HAL_Delay(1000);
@@ -272,6 +275,7 @@ long Uncompansate_Temp()
 {
 	uint8_t val1, val2;
 	uint8_t reg_val = 0x2E;
+
 	HAL_I2C_Mem_Write(&hi2c1, 0xEF, 0xF4, 1, &reg_val, 1, 1000);
 	HAL_Delay(5);
 	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF6, 1, &val1, 1, 1000);
@@ -282,11 +286,26 @@ long Uncompansate_Temp()
 
 long Get_Temp(){
 	long X1, X2, B5, T;
+
 	X1 = ((UT - AC6) * AC5) / pow(2,15);
 	X2 = (MC * pow(2,11)) / (X1 + MD);
 	B5 = X1 + X2;
 	T = (B5 + 8) / ((float)160);
+
 	return T;
+}
+
+long Uncompansate_Pressure(){
+	uint8_t val1, val2, val3;
+	uint8_t reg_val = 0x34;
+
+	HAL_I2C_Mem_Write(&hi2c1, 0xEF, (0xF4+(oss<<6)), 1, &reg_val, 1, 1000);
+	HAL_Delay(5);
+	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF6, 1, &val1, 1, 1000);
+	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF7, 1, &val2, 1, 1000);
+	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF8, 1, &val3, 1, 1000);
+
+	return ((val1<<16 | val2<<8 | val3) >> (8-oss));
 }
 /* USER CODE END 4 */
 
