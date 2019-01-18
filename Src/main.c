@@ -78,10 +78,13 @@ static void MX_I2C1_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-uint8_t AC1, AC2, AC3, AC4, AC5, AC6, B1, B2, MB, MC, MD;
+short AC1, AC2, AC3, B1, B2, MB, MC, MD;
+unsigned short AC4, AC5, AC6;
+long UT;
 void Callibration();
-void writeReg(uint8_t reg,uint8_t val);
+void writeReg(uint8_t reg, uint8_t val);
 uint8_t readReg(uint8_t reg);
+long Compansate_Temp();
 /* USER CODE END 0 */
 
 /**
@@ -114,8 +117,7 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-  Callibration();
-  HAL_Delay(5);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -125,6 +127,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  Callibration();
+	  HAL_Delay(5);
+	  UT = Compansate_Temp();
 	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
 	  HAL_Delay(1000);
   }
@@ -247,16 +252,28 @@ void Callibration()
 
 uint8_t readReg(uint8_t reg)
 {
-	uint8_t retVal = 0, reg2 = reg;
-	//HAL_I2C_Master_Transmit(&hi2c1, 0xEF,	&reg , 1, 10000);
+	uint8_t retVal = 0;
+	HAL_I2C_Master_Transmit(&hi2c1, 0xEF, &reg , 1, 10000);
 	HAL_I2C_Master_Receive(&hi2c1, 0xEF, &retVal, 1, 10000);
 	return retVal;
 }
 
-void writeReg(uint8_t reg,uint8_t val)
+void writeReg(uint8_t reg, uint8_t val)
 {
 	uint8_t data[2] = {reg,val};
-	HAL_I2C_Master_Transmit(&hi2c1, 0xEF,	data , 2, 10000);
+	HAL_I2C_Master_Transmit(&hi2c1, 0xEF, data, 2, 10000);
+}
+
+long Compansate_Temp()
+{
+	uint8_t val1, val2;
+	uint8_t reg_val = 0x2E;
+	HAL_I2C_Mem_Write(&hi2c1, 0xEF, 0xF4, 1, &reg_val, 1, 1000);
+	HAL_Delay(5);
+	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF6, 1, &val1, 1, 1000);
+	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF7, 1, &val2, 1, 1000);
+
+	return ((val1<<8) | val2);
 }
 /* USER CODE END 4 */
 
