@@ -80,9 +80,12 @@ static void MX_I2C1_Init(void);
 /* USER CODE BEGIN 0 */
 short AC1, AC2, AC3, B1, B2, MB, MC, MD;
 unsigned short AC4, AC5, AC6;
+long X1, X2, B5, T;
+long X1, X2, X3, B3, B6, P;
+unsigned long B4, B7;
 short oss = 1;
 long UT, UP;
-long temp;
+long temp, pressure;
 
 void Callibration();
 void writeReg(uint8_t reg, uint8_t val);
@@ -90,6 +93,7 @@ uint8_t readReg(uint8_t reg);
 long Uncompansate_Temp();
 long Get_Temp();
 long Uncompansate_Pressure();
+long Get_Pressure();
 /* USER CODE END 0 */
 
 /**
@@ -122,7 +126,8 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
-
+  Callibration();
+  HAL_Delay(5);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -132,11 +137,10 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  Callibration();
-	  HAL_Delay(5);
 	  UT = Uncompansate_Temp();
 	  UP = Uncompansate_Pressure();
 	  temp = Get_Temp();
+	  pressure = Get_Pressure();
 	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
 	  HAL_Delay(1000);
   }
@@ -285,8 +289,6 @@ long Uncompansate_Temp()
 }
 
 long Get_Temp(){
-	long X1, X2, B5, T;
-
 	X1 = ((UT - AC6) * AC5) / pow(2,15);
 	X2 = (MC * pow(2,11)) / (X1 + MD);
 	B5 = X1 + X2;
@@ -306,6 +308,29 @@ long Uncompansate_Pressure(){
 	HAL_I2C_Mem_Read(&hi2c1, 0xEF, 0xF8, 1, &val3, 1, 1000);
 
 	return ((val1<<16 | val2<<8 | val3) >> (8-oss));
+}
+
+long Get_Pressure(){
+	B6 = B5 - 4000;
+	X1 = (B2 * (B6 * B6 / pow(2,12))) / pow(2,11);
+	X2 = AC2 * B6 / pow(2,11);
+	X3 = X1 + X2;
+	B3 = ((((AC1 * 4) + X3) << oss) + 2) / 4;
+	X1 = (AC3 * B6) / pow(2,13);
+	X2 = (B1 * ((B6 * B6) / pow(2,12))) / pow(2,16);
+	X3 = ((X1 + X2) + 2) / pow(2,2);
+	B4 = (AC4 * (unsigned long)(X3 + 32768)) / pow(2,15);
+	B7 = ((unsigned long)UP - B3) * (50000 >> oss);
+	if(B7 < 0x80000000)
+		P = (B7 * 2) / B4;
+	else
+		P = (B7 / B4) * 2;
+	X1 = (P / pow(2,8) * (P / pow(2,8)));
+	X1 = (X1 * 3038) / pow(2,16);
+	X2 = (-7357 * P) / pow(2,16);
+	P = P + (X1 + X2 + 3791) / 16;
+
+	return P / 100;
 }
 /* USER CODE END 4 */
 
