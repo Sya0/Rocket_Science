@@ -85,7 +85,7 @@ long X1, X2, X3, B3, B6, P;
 unsigned long B4, B7;
 short oss = 1;
 long UT, UP;
-long temp, pressure;
+long temp, pressure, reference_pressure, altitude;
 
 void Callibration();
 void writeReg(uint8_t reg, uint8_t val);
@@ -94,6 +94,8 @@ long Uncompansate_Temp();
 long Get_Temp();
 long Uncompansate_Pressure();
 long Get_Pressure();
+void Callibrate_Altitude();
+long Get_Altitude();
 /* USER CODE END 0 */
 
 /**
@@ -128,6 +130,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   Callibration();
   HAL_Delay(5);
+  Callibrate_Altitude();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -137,10 +140,9 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  UT = Uncompansate_Temp();
-	  UP = Uncompansate_Pressure();
 	  temp = Get_Temp();
 	  pressure = Get_Pressure();
+	  altitude = Get_Altitude();
 	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
 	  HAL_Delay(1000);
   }
@@ -269,12 +271,6 @@ uint8_t readReg(uint8_t reg)
 	return retVal;
 }
 
-void writeReg(uint8_t reg, uint8_t val)
-{
-	uint8_t data[2] = {reg,val};
-	HAL_I2C_Master_Transmit(&hi2c1, 0xEF, data, 2, 10000);
-}
-
 long Uncompansate_Temp()
 {
 	uint8_t val1, val2;
@@ -289,6 +285,8 @@ long Uncompansate_Temp()
 }
 
 long Get_Temp(){
+	UT = Uncompansate_Temp();
+
 	X1 = ((UT - AC6) * AC5) / pow(2,15);
 	X2 = (MC * pow(2,11)) / (X1 + MD);
 	B5 = X1 + X2;
@@ -310,7 +308,10 @@ long Uncompansate_Pressure(){
 	return ((val1<<16 | val2<<8 | val3) >> (8-oss));
 }
 
+// Pressure value is calculated in term of hPa
 long Get_Pressure(){
+	UP = Uncompansate_Pressure();
+
 	B6 = B5 - 4000;
 	X1 = (B2 * (B6 * B6 / pow(2,12))) / pow(2,11);
 	X2 = AC2 * B6 / pow(2,11);
@@ -331,6 +332,19 @@ long Get_Pressure(){
 	P = P + (X1 + X2 + 3791) / 16;
 
 	return P / 100;
+}
+
+void Callibrate_Altitude(){
+	Get_Temp();
+	reference_pressure = Get_Pressure();
+}
+
+long Get_Altitude(){
+	long A;
+
+	A = 44330 * (1 - pow((pressure / reference_pressure), (1 / 5.255)));
+
+	return A;
 }
 /* USER CODE END 4 */
 
