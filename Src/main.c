@@ -43,7 +43,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <math.h>
+#include <string.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -64,6 +65,8 @@
 /* Private variables ---------------------------------------------------------*/
 I2C_HandleTypeDef hi2c1;
 
+UART_HandleTypeDef huart1;
+
 /* USER CODE BEGIN PV */
 
 /* USER CODE END PV */
@@ -72,6 +75,7 @@ I2C_HandleTypeDef hi2c1;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
+static void MX_USART1_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -87,6 +91,10 @@ short oss = 1;
 long UT, UP;
 long temp, pressure, reference_pressure, altitude;
 
+uint8_t gps_data[500];
+
+uint8_t UART_Status;
+
 void Callibration();
 void writeReg(uint8_t reg, uint8_t val);
 uint8_t readReg(uint8_t reg);
@@ -94,8 +102,11 @@ long Uncompansate_Temp();
 long Get_Temp();
 long Uncompansate_Pressure();
 long Get_Pressure();
-void Callibrate_Altitude();
+void Reference_Altitude();
 long Get_Altitude();
+void Get_GPS();
+
+//HAL_UART_ENABLE_IT(&huart1, );
 /* USER CODE END 0 */
 
 /**
@@ -127,10 +138,13 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_I2C1_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+
   Callibration();
   HAL_Delay(5);
-  Callibrate_Altitude();
+  Reference_Altitude();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -143,8 +157,9 @@ int main(void)
 	  temp = Get_Temp();
 	  pressure = Get_Pressure();
 	  altitude = Get_Altitude();
-	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
-	  HAL_Delay(1000);
+	  if((UART_Status != HAL_OK) || (UART_Status != HAL_TIMEOUT)){
+		UART_Status = HAL_UART_Receive_IT(&huart1,gps_data,500);
+	  }
   }
   /* USER CODE END 3 */
 }
@@ -221,6 +236,39 @@ static void MX_I2C1_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 9600;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -248,19 +296,24 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+	HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
+	Get_GPS();
+}
+
 void Callibration()
 {
-		AC1 = (readReg(0xAA) << 8 | readReg(0xAB));
-		AC2 = (readReg(0xAC) << 8 | readReg(0xAD));
-		AC3 = (readReg(0xAE) << 8 | readReg(0xAF));
-		AC4 = (readReg(0xB0) << 8 | readReg(0xB1));
-		AC5 = (readReg(0xB2) << 8 | readReg(0xB3));
-		AC6 = (readReg(0xB4) << 8 | readReg(0xB5));
-		B1 = (readReg(0xB6) << 8 | readReg(0xB7));
-		B2 = (readReg(0xB8) << 8 | readReg(0xB9));
-		MB = (readReg(0xBA) << 8 | readReg(0xBB));
-		MC = (readReg(0xBC) << 8 | readReg(0xBD));
-		MD = (readReg(0xBE) << 8 | readReg(0xBF));
+	AC1 = (readReg(0xAA) << 8 | readReg(0xAB));
+	AC2 = (readReg(0xAC) << 8 | readReg(0xAD));
+	AC3 = (readReg(0xAE) << 8 | readReg(0xAF));
+	AC4 = (readReg(0xB0) << 8 | readReg(0xB1));
+	AC5 = (readReg(0xB2) << 8 | readReg(0xB3));
+	AC6 = (readReg(0xB4) << 8 | readReg(0xB5));
+	B1 = (readReg(0xB6) << 8 | readReg(0xB7));
+	B2 = (readReg(0xB8) << 8 | readReg(0xB9));
+	MB = (readReg(0xBA) << 8 | readReg(0xBB));
+	MC = (readReg(0xBC) << 8 | readReg(0xBD));
+	MD = (readReg(0xBE) << 8 | readReg(0xBF));
 }
 
 uint8_t readReg(uint8_t reg)
@@ -334,7 +387,7 @@ long Get_Pressure(){
 	return P / 100;
 }
 
-void Callibrate_Altitude(){
+void Reference_Altitude(){
 	Get_Temp();
 	reference_pressure = Get_Pressure();
 }
@@ -345,6 +398,65 @@ long Get_Altitude(){
 	A = 44330 * (1 - pow((pressure / reference_pressure), (1 / 5.255)));
 
 	return A;
+}
+
+void Get_GPS(){
+	char *strFindptr, Time[9], Status[1], Latitude[10], Longitude[11], Speed[5];
+
+	strFindptr = strstr(gps_data, "$GPRMC,");
+
+	if(!(strFindptr == &gps_data))
+	{
+		//(1)Extract Time
+		if(strFindptr[7]==',')
+		{
+			sprintf(Time,"------.--");
+		}
+		else
+		{
+			memcpy(Time,&strFindptr[7],9);
+		}
+		//(2)Extract Status
+		strFindptr = strstr(&strFindptr[7],",");
+		if(strFindptr[0+1]==',')
+		{
+			sprintf(Status,"-");
+		}
+		else
+		{
+			memcpy(Status,&strFindptr[0+1],1);
+		}
+		//(3)Extract Latitude
+		strFindptr = strstr(&strFindptr[0+1],",");
+		if(strFindptr[0+1]==',')
+		{
+			sprintf(Latitude,"----.-----");
+		}
+		else
+		{
+			memcpy(Latitude,&strFindptr[0+1],10);
+		}
+		//(4)Extract Longitude
+		strFindptr = strstr(&strFindptr[0+1],",");
+		if(strFindptr[0+1]==',')
+		{
+			sprintf(Longitude,"-----.-----");
+		}
+		else
+		{
+			memcpy(Longitude,&strFindptr[0+1],11);
+		}
+		//(5)Extract Ground Speed
+		strFindptr = strstr(&strFindptr[0+1],",");
+		if(strFindptr[0+1]==',')
+		{
+			sprintf(Speed,"-.---");
+		}
+		else
+		{
+			memcpy(Speed,&strFindptr[0+1],5);
+		}
+	}
 }
 /* USER CODE END 4 */
 
