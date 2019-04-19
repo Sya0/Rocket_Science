@@ -66,6 +66,7 @@
 I2C_HandleTypeDef hi2c1;
 
 UART_HandleTypeDef huart1;
+UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
 
@@ -76,6 +77,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -91,7 +93,7 @@ short oss = 1;
 long UT, UP;
 long temp, pressure, reference_pressure, altitude;
 
-uint8_t gps_data[500];
+char gps_data[500];
 
 uint8_t UART_Status;
 
@@ -139,6 +141,7 @@ int main(void)
   MX_GPIO_Init();
   MX_I2C1_Init();
   MX_USART1_UART_Init();
+  MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
   Callibration();
@@ -158,8 +161,14 @@ int main(void)
 	  pressure = Get_Pressure();
 	  altitude = Get_Altitude();
 	  if((UART_Status != HAL_OK) || (UART_Status != HAL_TIMEOUT)){
-		UART_Status = HAL_UART_Receive_IT(&huart1,gps_data,500);
+		//UART_Status = HAL_UART_Receive_IT(&huart1,(uint8_t *)gps_data,1000);
+		  UART_Status = HAL_UART_Receive(&huart1,(uint8_t *)gps_data,500,1000);
 	  }
+	  Get_GPS();
+	  HAL_Delay(50);
+	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
+	  HAL_UART_Transmit(&huart2,1,1,1000);
+	  HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
@@ -199,6 +208,9 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+  /**Enables the Clock Security System 
+  */
+  HAL_RCC_EnableCSS();
 }
 
 /**
@@ -269,6 +281,39 @@ static void MX_USART1_UART_Init(void)
 }
 
 /**
+  * @brief USART2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART2_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART2_Init 0 */
+
+  /* USER CODE END USART2_Init 0 */
+
+  /* USER CODE BEGIN USART2_Init 1 */
+
+  /* USER CODE END USART2_Init 1 */
+  huart2.Instance = USART2;
+  huart2.Init.BaudRate = 9600;
+  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.StopBits = UART_STOPBITS_1;
+  huart2.Init.Parity = UART_PARITY_NONE;
+  huart2.Init.Mode = UART_MODE_TX_RX;
+  huart2.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart2.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART2_Init 2 */
+
+  /* USER CODE END USART2_Init 2 */
+
+}
+
+/**
   * @brief GPIO Initialization Function
   * @param None
   * @retval None
@@ -296,7 +341,8 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
 	HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
 	Get_GPS();
 }
@@ -337,7 +383,8 @@ long Uncompansate_Temp()
 	return ((val1<<8) | val2);
 }
 
-long Get_Temp(){
+long Get_Temp()
+{
 	UT = Uncompansate_Temp();
 
 	X1 = ((UT - AC6) * AC5) / pow(2,15);
@@ -348,7 +395,8 @@ long Get_Temp(){
 	return T;
 }
 
-long Uncompansate_Pressure(){
+long Uncompansate_Pressure()
+{
 	uint8_t val1, val2, val3;
 	uint8_t reg_val = 0x34;
 
@@ -362,7 +410,8 @@ long Uncompansate_Pressure(){
 }
 
 // Pressure value is calculated in term of hPa
-long Get_Pressure(){
+long Get_Pressure()
+{
 	UP = Uncompansate_Pressure();
 
 	B6 = B5 - 4000;
@@ -387,12 +436,14 @@ long Get_Pressure(){
 	return P / 100;
 }
 
-void Reference_Altitude(){
+void Reference_Altitude()
+{
 	Get_Temp();
 	reference_pressure = Get_Pressure();
 }
 
-long Get_Altitude(){
+long Get_Altitude()
+{
 	long A;
 
 	A = 44330 * (1 - pow((pressure / reference_pressure), (1 / 5.255)));
@@ -400,13 +451,15 @@ long Get_Altitude(){
 	return A;
 }
 
-void Get_GPS(){
-	char *strFindptr, Time[9], Status[1], Latitude[10], Longitude[11], Speed[5];
+void Get_GPS()
+{
+	char *strFindptr;
+	char Time[9] = {0} ,Status[1] = {0}, Latitude[10] = {0}, Longitude[11] = {0}, Speed[5] = {0};
+	const char key_word[7] = "$GPRMS,";
 
-	strFindptr = strstr(gps_data, "$GPRMC,");
+	strFindptr = strstr(gps_data, key_word);
 
-	if(!(strFindptr == &gps_data))
-	{
+	if(strFindptr != 0)	{
 		//(1)Extract Time
 		if(strFindptr[7]==',')
 		{
