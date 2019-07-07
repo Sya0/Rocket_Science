@@ -75,8 +75,8 @@ UART_HandleTypeDef huart2;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_I2C1_Init(void);
 static void MX_USART1_UART_Init(void);
+static void MX_I2C1_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -84,6 +84,12 @@ static void MX_USART2_UART_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/*enum opcode {
+	first_temperature = 1,
+	second_pressure = 2,
+	third_altitude = 3
+};*/
+
 short AC1, AC2, AC3, B1, B2, MB, MC, MD;
 unsigned short AC4, AC5, AC6;
 long X1, X2, B5, T;
@@ -91,9 +97,18 @@ long X1, X2, X3, B3, B6, P;
 unsigned long B4, B7;
 short oss = 1;
 long UT, UP;
-long temp, pressure, reference_pressure, altitude;
+int temperature, pressure, reference_pressure, altitude;
 
 char gps_data[500];
+char Latitude[9], Longitude[10];
+
+char all_data[12] = {'0'};
+char sicaklik[6] = {'0'};
+char basinc[8] = {'0'};
+char yukseklik[8] = {'0'};
+
+uint8_t data_length = 0;
+int sicaklik_counter = 0, basinc_counter = 0, yukseklik_counter = 0;
 
 uint8_t UART_Status;
 
@@ -107,8 +122,8 @@ long Get_Pressure();
 void Reference_Altitude();
 long Get_Altitude();
 void Get_GPS();
+void Transmit_Data();
 
-//HAL_UART_ENABLE_IT(&huart1, );
 /* USER CODE END 0 */
 
 /**
@@ -139,8 +154,8 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
-  MX_I2C1_Init();
   MX_USART1_UART_Init();
+  MX_I2C1_Init();
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
@@ -157,18 +172,13 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  temp = Get_Temp();
+	  temperature = Get_Temp();
 	  pressure = Get_Pressure();
 	  altitude = Get_Altitude();
-	  if((UART_Status != HAL_OK) || (UART_Status != HAL_TIMEOUT)){
-		//UART_Status = HAL_UART_Receive_IT(&huart1,(uint8_t *)gps_data,1000);
-		  UART_Status = HAL_UART_Receive(&huart1,(uint8_t *)gps_data,500,1000);
-	  }
 	  Get_GPS();
-	  HAL_Delay(50);
-	  HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
-	  HAL_UART_Transmit(&huart2,1,1,1000);
-	  HAL_Delay(1000);
+	  HAL_Delay(100);
+	  Transmit_Data();
+	  HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
@@ -184,13 +194,10 @@ void SystemClock_Config(void)
 
   /**Initializes the CPU, AHB and APB busses clocks 
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -199,18 +206,15 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
   RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
-  /**Enables the Clock Security System 
-  */
-  HAL_RCC_EnableCSS();
 }
 
 /**
@@ -267,7 +271,7 @@ static void MX_USART1_UART_Init(void)
   huart1.Init.WordLength = UART_WORDLENGTH_8B;
   huart1.Init.StopBits = UART_STOPBITS_1;
   huart1.Init.Parity = UART_PARITY_NONE;
-  huart1.Init.Mode = UART_MODE_RX;
+  huart1.Init.Mode = UART_MODE_TX_RX;
   huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   huart1.Init.OverSampling = UART_OVERSAMPLING_16;
   if (HAL_UART_Init(&huart1) != HAL_OK)
@@ -320,33 +324,15 @@ static void MX_USART2_UART_Init(void)
   */
 static void MX_GPIO_Init(void)
 {
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : LED_Pin */
-  GPIO_InitStruct.Pin = LED_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(LED_GPIO_Port, &GPIO_InitStruct);
-
 }
 
 /* USER CODE BEGIN 4 */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	HAL_GPIO_TogglePin(LED_GPIO_Port,LED_Pin);
-	Get_GPS();
-}
-
 void Callibration()
 {
 	AC1 = (readReg(0xAA) << 8 | readReg(0xAB));
@@ -454,62 +440,97 @@ long Get_Altitude()
 void Get_GPS()
 {
 	char *strFindptr;
-	char Time[9] = {0} ,Status[1] = {0}, Latitude[10] = {0}, Longitude[11] = {0}, Speed[5] = {0};
-	const char key_word[7] = "$GPRMS,";
+	char temp;
+	//const char key_word[7] = "$GNGLL,";		// strstr() fonksiyonu bununla calismadi ???
 
-	strFindptr = strstr(gps_data, key_word);
+	UART_Status = HAL_UART_Receive(&huart1,(uint8_t *)gps_data,500,1000);
+
+	strFindptr = strstr(gps_data, "$GNGLL,");
 
 	if(strFindptr != 0)	{
-		//(1)Extract Time
-		if(strFindptr[7]==',')
-		{
-			sprintf(Time,"------.--");
-		}
-		else
-		{
-			memcpy(Time,&strFindptr[7],9);
-		}
-		//(2)Extract Status
-		strFindptr = strstr(&strFindptr[7],",");
-		if(strFindptr[0+1]==',')
-		{
-			sprintf(Status,"-");
-		}
-		else
-		{
-			memcpy(Status,&strFindptr[0+1],1);
-		}
 		//(3)Extract Latitude
-		strFindptr = strstr(&strFindptr[0+1],",");
-		if(strFindptr[0+1]==',')
+		strFindptr = strstr(&strFindptr[1],",");
+		if(strFindptr[1]!=',')
 		{
-			sprintf(Latitude,"----.-----");
+			memcpy(Latitude,&strFindptr[1],9);
+			temp = Latitude[4];
+			Latitude[4] = Latitude[3];
+			Latitude[3] = Latitude[2];
+			Latitude[2] = temp;
 		}
 		else
 		{
-			memcpy(Latitude,&strFindptr[0+1],10);
+			sprintf(Latitude,"--.-----");
 		}
 		//(4)Extract Longitude
-		strFindptr = strstr(&strFindptr[0+1],",");
-		if(strFindptr[0+1]==',')
+		strFindptr = strstr(&strFindptr[1],",");
+		strFindptr = strstr(&strFindptr[1],",");
+		if(strFindptr[1]!=',')
 		{
-			sprintf(Longitude,"-----.-----");
+			memcpy(Longitude,&strFindptr[1],10);
+			temp = Latitude[4];
+			Longitude[4] = Longitude[3];
+			Longitude[3] = Longitude[2];
+			Longitude[2] = temp;
 		}
 		else
 		{
-			memcpy(Longitude,&strFindptr[0+1],11);
-		}
-		//(5)Extract Ground Speed
-		strFindptr = strstr(&strFindptr[0+1],",");
-		if(strFindptr[0+1]==',')
-		{
-			sprintf(Speed,"-.---");
-		}
-		else
-		{
-			memcpy(Speed,&strFindptr[0+1],5);
+			sprintf(Longitude,"--.-----");
 		}
 	}
+}
+
+void Transmit_Data()
+{
+	data_length = 0;
+	sicaklik_counter = 0;
+	basinc_counter = 0;
+	yukseklik_counter = 0;
+
+	// Opcode
+	sicaklik[0] = 1;
+	basinc[0] = 2;
+	yukseklik[0] = 3;
+
+	// Value assignment
+	sprintf(sicaklik+2,"%d",temperature);
+	sprintf(basinc+2,"%d",pressure);
+	sprintf(yukseklik+2,"%d",altitude);
+
+	// Determining valid data length
+	while(sicaklik[2+sicaklik_counter] != '\0'){
+		data_length++;
+		sicaklik_counter++;
+	}
+
+	while(basinc[2+basinc_counter] != '\0'){
+		data_length++;
+		basinc_counter++;
+	}
+
+	while(yukseklik[2+yukseklik_counter] != '\0'){
+		data_length++;
+		yukseklik_counter++;
+	}
+
+	// Assign valid length to array
+	memcpy(sicaklik+1,&sicaklik_counter,1);
+	memcpy(basinc+1,&basinc_counter,1);
+	memcpy(yukseklik+1,&yukseklik_counter,1);
+
+	/*memcpy(all_data,sicaklik,sicaklik_counter);
+	memcpy((all_data+sicaklik_counter),basinc,basinc_counter);
+	memcpy((all_data+sicaklik_counter+basinc_counter),yukseklik,yukseklik_counter);*/
+
+	HAL_UART_Transmit(&huart2,(uint8_t *)sicaklik,sicaklik_counter+2,100);
+	HAL_Delay(10);
+	HAL_UART_Transmit(&huart2,(uint8_t *)basinc,basinc_counter+2,100);
+	HAL_Delay(10);
+	HAL_UART_Transmit(&huart2,(uint8_t *)yukseklik,yukseklik_counter+2,100);
+	HAL_Delay(10);
+	HAL_UART_Transmit(&huart2,(uint8_t *)basinc,basinc_counter+2,100);
+	HAL_Delay(10);
+	HAL_UART_Transmit(&huart2,(uint8_t *)yukseklik,yukseklik_counter+2,100);
 }
 /* USER CODE END 4 */
 
