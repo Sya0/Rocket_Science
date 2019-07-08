@@ -100,7 +100,7 @@ long UT, UP;
 int temperature, pressure, reference_pressure, altitude;
 
 char gps_data[500];
-char Latitude[9], Longitude[10];
+char Latitude[10], Longitude[11];
 
 char all_data[12] = {'0'};
 char sicaklik[6] = {'0'};
@@ -452,30 +452,30 @@ void Get_GPS()
 		strFindptr = strstr(&strFindptr[1],",");
 		if(strFindptr[1]!=',')
 		{
-			memcpy(Latitude,&strFindptr[1],9);
-			temp = Latitude[4];
+			memcpy(Latitude+1,&strFindptr[1],9);
+			temp = Latitude[5];
+			Latitude[5] = Latitude[4];
 			Latitude[4] = Latitude[3];
-			Latitude[3] = Latitude[2];
-			Latitude[2] = temp;
+			Latitude[3] = temp;
 		}
 		else
 		{
-			sprintf(Latitude,"--.-----");
+			sprintf(Latitude+1,"--.------");
 		}
 		//(4)Extract Longitude
 		strFindptr = strstr(&strFindptr[1],",");
 		strFindptr = strstr(&strFindptr[1],",");
 		if(strFindptr[1]!=',')
 		{
-			memcpy(Longitude,&strFindptr[1],10);
-			temp = Latitude[4];
-			Longitude[4] = Longitude[3];
-			Longitude[3] = Longitude[2];
-			Longitude[2] = temp;
+			memcpy(Longitude+1,&strFindptr[1],10);
+			temp = Longitude[6];
+			Longitude[6] = Longitude[5];
+			Longitude[5] = Longitude[4];
+			Longitude[4] = temp;
 		}
 		else
 		{
-			sprintf(Longitude,"--.-----");
+			sprintf(Longitude+1,"--.-------");
 		}
 	}
 }
@@ -491,6 +491,8 @@ void Transmit_Data()
 	sicaklik[0] = 1;
 	basinc[0] = 2;
 	yukseklik[0] = 3;
+	Latitude[0] = 4;
+	Longitude[0] = 5;
 
 	// Value assignment
 	sprintf(sicaklik+2,"%d",temperature);
@@ -518,19 +520,15 @@ void Transmit_Data()
 	memcpy(basinc+1,&basinc_counter,1);
 	memcpy(yukseklik+1,&yukseklik_counter,1);
 
-	/*memcpy(all_data,sicaklik,sicaklik_counter);
-	memcpy((all_data+sicaklik_counter),basinc,basinc_counter);
-	memcpy((all_data+sicaklik_counter+basinc_counter),yukseklik,yukseklik_counter);*/
-
 	HAL_UART_Transmit(&huart2,(uint8_t *)sicaklik,sicaklik_counter+2,100);
-	HAL_Delay(10);
+	HAL_Delay(20);
 	HAL_UART_Transmit(&huart2,(uint8_t *)basinc,basinc_counter+2,100);
-	HAL_Delay(10);
+	HAL_Delay(20);
 	HAL_UART_Transmit(&huart2,(uint8_t *)yukseklik,yukseklik_counter+2,100);
-	HAL_Delay(10);
-	HAL_UART_Transmit(&huart2,(uint8_t *)basinc,basinc_counter+2,100);
-	HAL_Delay(10);
-	HAL_UART_Transmit(&huart2,(uint8_t *)yukseklik,yukseklik_counter+2,100);
+	HAL_Delay(20);
+	HAL_UART_Transmit(&huart2,(uint8_t *)Latitude,10,100);
+	HAL_Delay(20);
+	HAL_UART_Transmit(&huart2,(uint8_t *)Longitude,11,100);
 }
 /* USER CODE END 4 */
 
