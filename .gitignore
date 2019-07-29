@@ -1,6 +1,2 @@
 /Debug/
-/startup/
-*.launch
-*.ld
-syscalls.c
 .*
